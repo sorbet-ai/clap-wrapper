@@ -304,9 +304,12 @@ function(target_add_auv2_wrapper)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${bhtgoutdir}/auv2_Info.plist"
                 "$<TARGET_BUNDLE_CONTENT_DIR:${AUV2_TARGET}>/Info.plist"
             COMMAND ${CMAKE_COMMAND} -E touch "${plstamp}"
-            DEPENDS ${AUV2_TARGET} "${bhtgoutdir}/auv2_Info.plist" "$<TARGET_BUNDLE_CONTENT_DIR:${AUV2_TARGET}>/Info.plist"
+            DEPENDS "${bhtgoutdir}/auv2_Info.plist" "$<TARGET_BUNDLE_CONTENT_DIR:${AUV2_TARGET}>/Info.plist"
             VERBATIM)
+        # (after the target, but not on its binary's file: signing the bundle rewrites the binary,
+        # and the copy would then run at every build)
         add_custom_target(${AUV2_TARGET}-info-plist ALL DEPENDS "${plstamp}")
+        add_dependencies(${AUV2_TARGET}-info-plist ${AUV2_TARGET})
     endif ()
 
     # XCode needs a special extra flag
