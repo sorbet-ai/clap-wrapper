@@ -10,6 +10,35 @@ CLAP.
 
 Our [wiki](https://github.com/free-audio/clap-wrapper/wiki) is the root of our developer documentation.
 
+## This fork
+
+This is Sorbet AI's fork of [free-audio/clap-wrapper](https://github.com/free-audio/clap-wrapper),
+used by the [awva plugins](https://github.com/sorbet-ai/awva-plugins). Its branch `awva` is
+upstream's `806bba0` (0.17.0) with these fixes. `tests/wrapper-regressions` checks them: run
+`ctest -R wrapper-regressions` with `CLAP_WRAPPER_BUILD_TESTS`.
+
+- **VST3: `ASSET_OUTPUT_DIRECTORY` works on macOS and for a single-file Windows VST3.** It used to
+  set the property on `VST3_TARGET`, which is unset, so the option was silently ignored. It worked
+  through `make_clapfirst_plugins` only because that function sets `VST3_TARGET` in its own scope.
+- **AUv2: the bundle's name with `CLAP_TARGET_FOR_CONFIG`.** `OUTPUT_NAME` is used if given;
+  otherwise the name is the CLAP target's `LIBRARY_OUTPUT_NAME`, its `OUTPUT_NAME`, or the target's
+  name. Before, the name was always the CLAP target's `LIBRARY_OUTPUT_NAME`, and when that was
+  unset the configure step failed in `string(MAKE_C_IDENTIFIER)`.
+- **AUv2: the Info.plist survives a re-configure.** With Ninja and Makefiles, CMake writes the
+  bundle's generic Info.plist again at every configure, and the `PRE_BUILD` copy of the AU's plist
+  runs only when the target links. `<target>-info-plist` (in ALL) now copies the AU's plist in
+  whenever either plist changed. If you sign the bundle, sign it after that target.
+- **AUv2: no Cocoa view without a gui extension.** `GetProperty(kAudioUnitProperty_CocoaUI)` returned
+  a view for a plugin without one. Through `AudioUnitGetProperty` the AU SDK asks `GetPropertyInfo`
+  first, which already refused, so the test passes before and after this fix.
+- **AUv2: the class data keeps the present preset's name.** `SaveState` wrote its own
+  "Program" name, not the preset a host had set through `kAudioUnitProperty_PresentPreset`, and
+  auval warned "Preset name is not retained in retrieved class data". It now writes the AU SDK's
+  current preset, and `RestoreState` makes the restored name the current preset's, as
+  `AUBase::RestoreState` does.
+
+The licence (MIT) and the authors are upstream's.
+
 Currently the `clap-wrapper` supports projecting a CLAP into
 
 - VST3
