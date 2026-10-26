@@ -229,10 +229,6 @@ WrapAsAUV2::~WrapAsAUV2()
     _plugin->terminate();
     _plugin.reset();
   }
-  if (_current_program_name)
-  {
-    CFRelease(_current_program_name);
-  }
   // AUBase must not retain a pointer to a member-owned lock during base destruction.
   SetMutex(nullptr);
 }
@@ -1019,7 +1015,7 @@ OSStatus WrapAsAUV2::GetPropertyInfo(AudioUnitPropertyID inID, AudioUnitScope in
         break;
 
       case kAudioUnitProperty_CocoaUI:
-        if (!_plugin->_ext._gui) return kAudioUnitErr_InvalidProperty;
+        if (!_plugin || !_plugin->_ext._gui) return kAudioUnitErr_InvalidProperty;
         if (!_plugin->_ext._gui->is_api_supported(_plugin->_plugin, CLAP_WINDOW_API_COCOA, false))
           return kAudioUnitErr_InvalidProperty;
         outWritable = false;
@@ -1151,14 +1147,8 @@ OSStatus WrapAsAUV2::GetProperty(AudioUnitPropertyID inID, AudioUnitScope inScop
           LOGINFO("[clap-wrapper] kAudioUnitProperty_CocoaUI complete");
           return noErr;  // sizeof(AudioUnitCocoaViewInfo);
         }
-        else
-        {
-          LOGINFO("[clap-wrapper] Mysterious: kAudioUnitProperty_CocoaUI although now plugin ext");
-          fillAudioUnitCocoaView(((AudioUnitCocoaViewInfo *)outData), _plugin);
-          return noErr;
-        }
+        // no gui, or no Cocoa one: no view, as GetPropertyInfo says
         return kAudioUnitErr_InvalidProperty;
-        break;
       case kAudioUnitProperty_MIDIOutputCallbackInfo:
         if (_midi_outports.size() > 0)
         {
@@ -2253,13 +2243,18 @@ OSStatus WrapAsAUV2::SaveState(CFPropertyListRef *ptPList)
     CFRelease(tData);
     chunk.clear();
 
-    if (_current_program_name == nullptr)
+    // the name of the current preset, as AUBase keeps it: the factory preset or the user preset a
+    // host set (kAudioUnitProperty_PresentPreset), or the name of the last state restored
+    AUPreset present{-1, nullptr};
+    if (AUBase::DispatchGetProperty(kAudioUnitProperty_PresentPreset, kAudioUnitScope_Global, 0,
+                                    &present) != noErr ||
+        present.presetName == nullptr)
     {
-      _current_program_name = CFStringCreateWithCString(NULL, "Program", kCFStringEncodingUTF8);
+      present.presetName = CFSTR("Untitled");
+      CFRetain(present.presetName);
     }
-    // const char  *name = "blarb";
-    // mPlugin->getProgramName(name);
-    CFDictionarySetValue(*dict, CFSTR(kAUPresetNameKey), _current_program_name);
+    CFDictionarySetValue(*dict, CFSTR(kAUPresetNameKey), present.presetName);
+    CFRelease(present.presetName);
 
     *ptPList = static_cast<CFPropertyListRef>(dict.release());  // transfer ownership
 #endif
@@ -2314,11 +2309,13 @@ OSStatus WrapAsAUV2::RestoreState(CFPropertyListRef plist)
   }
 #endif
 
+  // the state's name is the current preset's now (as AUBase::RestoreState makes it)
   const void *pName = CFDictionaryGetValue(tDict, CFSTR(kAUPresetNameKey));
-  if (pName)
-  {
-    _current_program_name = CFStringCreateCopy(NULL, (CFStringRef)pName);
-  }
+  const AUPreset restored{-1, (pName && CFGetTypeID(CFTypeRef(pName)) == CFStringGetTypeID())
+                                  ? static_cast<CFStringRef>(pName)
+                                  : CFSTR("Untitled")};
+  AUBase::NewCustomPresetSet(restored);
+  PropertyChanged(kAudioUnitProperty_PresentPreset, kAudioUnitScope_Global, 0);
 
   CFDataRef tData = CFDataRef(pData);
 

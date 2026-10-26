@@ -97,8 +97,18 @@ function(target_add_auv2_wrapper)
     if (NOT ${PREF} AND DEFINED AUV2_CLAP_TARGET_FOR_CONFIG)
         set(clpt ${AUV2_CLAP_TARGET_FOR_CONFIG})
         message(STATUS "clap-wrapper: building auv2 based on target ${AUV2_CLAP_TARGET_FOR_CONFIG}")
-        get_property(ton TARGET ${clpt} PROPERTY LIBRARY_OUTPUT_NAME)
-        set(AUV2_OUTPUT_NAME "${ton}")
+        # the bundle's name: OUTPUT_NAME if given, else the CLAP target's output name (its
+        # LIBRARY_OUTPUT_NAME, its OUTPUT_NAME, or the target's name, as CMake names its file)
+        if ("${AUV2_OUTPUT_NAME}" STREQUAL "")
+            get_property(ton TARGET ${clpt} PROPERTY LIBRARY_OUTPUT_NAME)
+            if ("${ton}" STREQUAL "")
+                get_property(ton TARGET ${clpt} PROPERTY OUTPUT_NAME)
+            endif ()
+            if ("${ton}" STREQUAL "")
+                set(ton "${clpt}")
+            endif ()
+            set(AUV2_OUTPUT_NAME "${ton}")
+        endif ()
 
         if (NOT DEFINED AUV2_MANUFACTURER_CODE)
             set(AUV2_MANUFACTURER_CODE "errr")
@@ -195,10 +205,10 @@ function(target_add_auv2_wrapper)
         )
     endif ()
 
-    string(MAKE_C_IDENTIFIER ${AUV2_OUTPUT_NAME} outidentifier)
+    string(MAKE_C_IDENTIFIER "${AUV2_OUTPUT_NAME}" outidentifier)
 
     if ("${AUV2_BUNDLE_IDENTIFIER}" STREQUAL "")
-        string(REPLACE "_" "-" repout ${outidentifier})
+        string(REPLACE "_" "-" repout "${outidentifier}")
         set(AUV2_BUNDLE_IDENTIFIER "org.cleveraudio.wrapper.${repout}.auv2")
     endif ()
 
@@ -269,9 +279,9 @@ function(target_add_auv2_wrapper)
     set_target_properties(${AUV2_TARGET} PROPERTIES
             BUNDLE True
             BUNDLE_EXTENSION component
-            LIBRARY_OUTPUT_NAME ${AUV2_OUTPUT_NAME}
+            LIBRARY_OUTPUT_NAME "${AUV2_OUTPUT_NAME}"
             MACOSX_BUNDLE_GUI_IDENTIFIER "${AUV2_BUNDLE_IDENTIFIER}.component"
-            MACOSX_BUNDLE_BUNDLE_NAME ${AUV2_OUTPUT_NAME}
+            MACOSX_BUNDLE_BUNDLE_NAME "${AUV2_OUTPUT_NAME}"
             MACOSX_BUNDLE_BUNDLE_VERSION ${AUV2_BUNDLE_VERSION}
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${AUV2_BUNDLE_VERSION}
             )
@@ -281,6 +291,23 @@ function(target_add_auv2_wrapper)
     # with compile time generated files
     add_custom_command(TARGET ${AUV2_TARGET} PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy ${bhtgoutdir}/auv2_Info.plist $<TARGET_FILE_DIR:${AUV2_TARGET}>/../Info.plist)
+
+    # With Ninja and Makefiles, CMake writes a bundle's Info.plist again at every configure (its
+    # generic one, without the AudioComponents entry) and PRE_BUILD runs only when the target
+    # links: after a re-configure the component wasn't an AU any more. So the AU's plist is also
+    # copied in whenever either plist changed, by ${AUV2_TARGET}-info-plist (in ALL, after the
+    # target); its stamp is the plist's last copy. (Xcode writes the plist and runs PRE_BUILD at
+    # every build.) Re-sign the bundle after this target if you sign it.
+    if (NOT CMAKE_GENERATOR STREQUAL "Xcode")
+        set(plstamp "${bhtgoutdir}/auv2_Info.plist.copied")
+        add_custom_command(OUTPUT "${plstamp}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${bhtgoutdir}/auv2_Info.plist"
+                "$<TARGET_BUNDLE_CONTENT_DIR:${AUV2_TARGET}>/Info.plist"
+            COMMAND ${CMAKE_COMMAND} -E touch "${plstamp}"
+            DEPENDS ${AUV2_TARGET} "${bhtgoutdir}/auv2_Info.plist" "$<TARGET_BUNDLE_CONTENT_DIR:${AUV2_TARGET}>/Info.plist"
+            VERBATIM)
+        add_custom_target(${AUV2_TARGET}-info-plist ALL DEPENDS "${plstamp}")
+    endif ()
 
     # XCode needs a special extra flag
     set_target_properties(${AUV2_TARGET} PROPERTIES XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${AUV2_BUNDLE_IDENTIFIER}.component")

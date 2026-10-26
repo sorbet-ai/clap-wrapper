@@ -165,7 +165,7 @@ function(target_add_vst3_wrapper)
         macos_bundle_flag(TARGET ${V3_TARGET})
 
         if (NOT "${V3_ASSET_OUTPUT_DIRECTORY}" STREQUAL "")
-            set_target_properties(${VST3_TARGET} PROPERTIES
+            set_target_properties(${V3_TARGET} PROPERTIES
                     LIBRARY_OUTPUT_DIRECTORY ${V3_ASSET_OUTPUT_DIRECTORY})
         endif()
 
@@ -209,7 +209,7 @@ function(target_add_vst3_wrapper)
                     SUFFIX ".vst3")
 
             if (NOT "${V3_ASSET_OUTPUT_DIRECTORY}" STREQUAL "")
-                set_target_properties(${VST3_TARGET} PROPERTIES
+                set_target_properties(${V3_TARGET} PROPERTIES
                         LIBRARY_OUTPUT_DIRECTORY "${V3_ASSET_OUTPUT_DIRECTORY}")
             endif()
 
