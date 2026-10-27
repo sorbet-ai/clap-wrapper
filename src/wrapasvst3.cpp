@@ -496,6 +496,16 @@ tresult PLUGIN_API ClapAsVst3::setupProcessing(Vst::ProcessSetup &newSetup)
 
   _largestBlocksize = newSetup.maxSamplesPerBlock;
 
+  // A CLAP plugin may refuse a sample rate only in activate(), but VST3 refuses it here: a host that
+  // got kResultOk from setupProcessing() expects setActive(true) to succeed (the VST3 SDK
+  // validator's "Process Format" test fails otherwise). So, while inactive, the setup is tried: the
+  // plugin activated and deactivated at once; a refused rate is refused here.
+  if (!_active)
+  {
+    if (!_plugin->activate()) return kResultFalse;
+    _plugin->deactivate();
+  }
+
   return kResultOk;
 }
 tresult PLUGIN_API ClapAsVst3::setProcessing(TBool state)
